@@ -45,4 +45,7 @@ def initialize_database() -> None:
           id INTEGER PRIMARY KEY, person_id INTEGER NOT NULL REFERENCES people(id), file_path TEXT NOT NULL,
           file_name TEXT NOT NULL, duration_seconds REAL, sample_rate_hz INTEGER, bitrate_kbps REAL,
           loudness_db REAL, analysis_note TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+        CREATE INDEX IF NOT EXISTS idx_people_city ON people(city);
+        CREATE INDEX IF NOT EXISTS idx_person_sources_person_id ON person_sources(person_id);
+        CREATE INDEX IF NOT EXISTS idx_person_skills_person_id ON person_skills(person_id);
         """)

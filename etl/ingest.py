@@ -18,10 +18,14 @@ def canonical(row, schema):
         raw.update(email=raw['name'], name=clean(row.get('rate')), city=clean(row.get('status')), skills=raw['email'])
     return {'name':normalize_name(raw.get('name')), 'email':normalize_email(raw.get('email')), 'phone':normalize_phone(raw.get('phone')), 'city':normalize_city(raw.get('city')), 'skills':normalize_skills(raw.get('skills')), 'experience':clean(raw.get('experience')), 'ctc':normalize_ctc(raw.get('ctc')), 'date':normalize_date(raw.get('date')), 'raw':raw}
 def find_match(conn, person):
-    for field, method in (('email','exact_email'),('phone','exact_phone')):
-        if person[field]:
-            row = conn.execute(f'SELECT * FROM people WHERE {field}=?', (person[field],)).fetchone()
-            if row: return row, method
+    email_match = conn.execute('SELECT * FROM people WHERE email=?', (person['email'],)).fetchone() if person['email'] else None
+    phone_match = conn.execute('SELECT * FROM people WHERE phone=?', (person['phone'],)).fetchone() if person['phone'] else None
+    if email_match and phone_match and email_match['id'] != phone_match['id']:
+        return None, 'conflicting_exact_identifiers'
+    if email_match:
+        return email_match, 'exact_email'
+    if phone_match:
+        return phone_match, 'exact_phone'
     if person['name'] and person['city']:
         matches=[p for p in conn.execute('SELECT * FROM people WHERE city=?',(person['city'],)) if name_key(p['canonical_name'])==name_key(person['name'])]
         if len(matches)==1: return matches[0], 'name_and_city'
