@@ -1,0 +1,8 @@
+{
+  "name": "ConsultBae local skill classification",
+  "nodes": [
+    {"parameters":{"path":"consultbae-classify","httpMethod":"POST","responseMode":"lastNode"},"id":"webhook","name":"Classify person","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[300,300]},
+    {"parameters":{"jsCode":"const skills = ($json.body?.skills || '').toLowerCase();\nconst category = /n8n|zapier|make|langchain|openai|automation/.test(skills) ? 'automation-heavy' : /fastapi|django|react|javascript/.test(skills) ? 'web-development' : /python|sql|pandas|data/.test(skills) ? 'data' : 'general';\nreturn [{ json: { person_id: $json.body?.person_id, classification: category, classification_status: 'completed' } }];"},"id":"classify","name":"Classify locally","type":"n8n-nodes-base.code","typeVersion":2,"position":[540,300]}
+  ],
+  "connections":{"Classify person":{"main":[[{"node":"Classify locally","type":"main","index":0}]]}},"active":false,"settings":{},"versionId":"local-1"
+}

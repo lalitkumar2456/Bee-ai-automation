@@ -1,0 +1,1 @@
+"""ConsultBae local application."""
