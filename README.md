@@ -8,19 +8,19 @@ A local-first implementation of the ConsultBae take-home assignment covering:
 4. Audio collection and metadata extraction
 5. Data-quality analysis and troubleshooting documentation
 
-The project is designed to run locally.
+The project is designed to run locally without cloud credentials.
 
 ## Architecture
 
 ```text
                     ┌──────────────────────┐
-                    │  3 source CSV files  │
+                    │   3 source CSV files │
                     └──────────┬───────────┘
                                │
                                ▼
                     ┌──────────────────────┐
-                    │    ETL / normalize   │
-                    │ identity matching     │
+                    │   ETL / normalize    │
+                    │   identity matching  │
                     └──────────┬───────────┘
                                │
                                ▼
@@ -30,14 +30,30 @@ The project is designed to run locally.
                     │ submissions / review │
                     └──────────┬───────────┘
                                │
-                 ┌─────────────┴─────────────┐
-                 │                           │
-                 ▼                           ▼
-        ┌─────────────────┐        ┌─────────────────┐
-        │  FastAPI audio  │        │      n8n        │
-        │   collection    │        │ classification  │
-        └────────┬────────┘        └────────┬────────┘
-                 │                          │
-                 ▼                          ▼
-        Audio + metadata            classification
-        stored in SQLite            written to SQLite
+                ┌──────────────┴──────────────┐
+                │                             │
+                ▼                             ▼
+       ┌─────────────────┐           ┌─────────────────┐
+       │ FastAPI audio   │           │       n8n       │
+       │ collection      │           │ classification  │
+       └────────┬────────┘           └────────┬────────┘
+                │                             │
+                ▼                             ▼
+       Audio + metadata              Retrieve candidate
+       stored in SQLite              skills from FastAPI
+                                              │
+                                              ▼
+                                     ┌─────────────────┐
+                                     │ Classify Skills  │
+                                     │ deterministic    │
+                                     │ skill rules      │
+                                     └────────┬────────┘
+                                              │
+                                              ▼
+                                     ┌─────────────────┐
+                                     │ FastAPI PATCH   │
+                                     │ classification  │
+                                     └────────┬────────┘
+                                              │
+                                              ▼
+                                         SQLite DB
