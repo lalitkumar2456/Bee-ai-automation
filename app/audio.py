@@ -1,6 +1,10 @@
 from __future__ import annotations
-import json, re, shutil, subprocess, wave
+
+import re
+import shutil
+import subprocess
 from pathlib import Path
+
 
 def _bundled_ffmpeg() -> str | None:
     try:
@@ -9,29 +13,54 @@ def _bundled_ffmpeg() -> str | None:
     except ImportError:
         return None
 
-def inspect_audio(path: Path) -> dict:
-    """Use local ffprobe when available; WAV files also work without FFmpeg."""
-    if shutil.which('ffprobe'):
-        result = subprocess.run(['ffprobe','-v','error','-show_entries','format=duration,bit_rate:stream=sample_rate','-of','json',str(path)],capture_output=True,text=True,check=False)
-        try:
-            info=json.loads(result.stdout); stream=next((x for x in info.get('streams',[]) if x.get('sample_rate')), {})
-            fmt=info.get('format',{}); return {'duration_seconds':round(float(fmt.get('duration',0)),2),'sample_rate_hz':int(stream['sample_rate']) if stream.get('sample_rate') else None,'bitrate_kbps':round(float(fmt['bit_rate'])/1000,1) if fmt.get('bit_rate') else None,'loudness_db':None,'analysis_note':'Duration/rate/bitrate from local ffprobe; loudness requires FFmpeg ebur128.'}
-        except (ValueError, KeyError, json.JSONDecodeError): pass
-    # The compact imageio-ffmpeg package provides a local FFmpeg binary even
-    # when Windows PATH does not contain ffprobe.
-    ffmpeg = shutil.which('ffmpeg') or _bundled_ffmpeg()
-    if ffmpeg:
-        result = subprocess.run([ffmpeg, '-hide_banner', '-i', str(path)], capture_output=True, text=True, check=False)
-        output = result.stderr
+
+def _invalid(note: str) -> dict:
+    return {
+        'valid': False, 'duration_seconds': None, 'sample_rate_hz': None,
+        'bitrate_kbps': None, 'loudness_db': None, 'analysis_note': note,
+    }
+
+
+def _ffmpeg_metadata(ffmpeg: str, path: Path) -> dict:
+    try:
+        probe = subprocess.run(
+            [ffmpeg, '-hide_banner', '-i', str(path)], capture_output=True,
+            text=True, check=False, timeout=30,
+        )
+        output = probe.stderr
         duration = re.search(r'Duration: (\d+):(\d+):(\d+(?:\.\d+)?)', output)
         sample_rate = re.search(r'Audio:.*?(\d+) Hz', output)
         bitrate = re.search(r'bitrate: (\d+(?:\.\d+)?) kb/s', output)
-        if duration:
-            hours, minutes, seconds = duration.groups()
-            seconds_total = int(hours) * 3600 + int(minutes) * 60 + float(seconds)
-            return {'duration_seconds':round(seconds_total,2), 'sample_rate_hz':int(sample_rate.group(1)) if sample_rate else None, 'bitrate_kbps':float(bitrate.group(1)) if bitrate else None, 'loudness_db':None, 'analysis_note':'Metadata extracted by bundled local FFmpeg.'}
-    if path.suffix.lower()=='.wav':
-        with wave.open(str(path),'rb') as a:
-            duration=a.getnframes()/a.getframerate(); rate=a.getframerate(); bitrate=a.getframerate()*a.getsampwidth()*8*a.getnchannels()/1000
-        return {'duration_seconds':round(duration,2),'sample_rate_hz':rate,'bitrate_kbps':round(bitrate,1),'loudness_db':None,'analysis_note':'WAV metadata calculated locally; install FFmpeg for MP3/M4A analysis.'}
-    return {'duration_seconds':None,'sample_rate_hz':None,'bitrate_kbps':None,'loudness_db':None,'analysis_note':'Install FFmpeg or upload WAV to extract metadata locally.'}
+        if not duration or not sample_rate or not bitrate:
+            return _invalid('FFmpeg could not read valid audio metadata.')
+
+        hours, minutes, seconds = duration.groups()
+        duration_seconds = int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+        loudness_run = subprocess.run(
+            [ffmpeg, '-hide_banner', '-nostats', '-i', str(path),
+             '-filter_complex', 'ebur128=peak=true', '-f', 'null', '-'],
+            capture_output=True, text=True, check=False, timeout=60,
+        )
+        loudness_values = re.findall(r'\bI:\s*(-?\d+(?:\.\d+)?)\s+LUFS', loudness_run.stderr)
+        if not loudness_values:
+            return _invalid('FFmpeg could not calculate integrated loudness.')
+        return {
+            'valid': True,
+            'duration_seconds': round(duration_seconds, 2),
+            'sample_rate_hz': int(sample_rate.group(1)),
+            'bitrate_kbps': float(bitrate.group(1)),
+            'loudness_db': float(loudness_values[-1]),
+            'analysis_note': 'Metadata and integrated loudness extracted by local FFmpeg (EBU R128).',
+        }
+    except (OSError, subprocess.TimeoutExpired) as error:
+        return _invalid(f'Local FFmpeg analysis failed: {error}.')
+
+
+def inspect_audio(path: Path) -> dict:
+    """Return validated audio metadata using the local FFmpeg executable."""
+    if not path.is_file() or path.stat().st_size == 0:
+        return _invalid('The uploaded audio file is empty or unavailable.')
+    ffmpeg = shutil.which('ffmpeg') or _bundled_ffmpeg()
+    if not ffmpeg:
+        return _invalid('No local FFmpeg executable is available for audio analysis.')
+    return _ffmpeg_metadata(ffmpeg, path)

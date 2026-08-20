@@ -45,3 +45,65 @@ def submissions():
     with connection() as conn: rows=conn.execute('SELECT a.*,p.canonical_name,p.phone FROM audio_submissions a JOIN people p ON p.id=a.person_id ORDER BY a.created_at DESC').fetchall()
     cells=''.join(f'<tr><td>{r["canonical_name"]}</td><td>{r["phone"]}</td><td>{r["duration_seconds"] or "—"}s</td><td>{r["sample_rate_hz"] or "—"}</td><td>{r["bitrate_kbps"] or "—"}</td><td><audio controls src="/media/{r["file_path"]}"></audio></td></tr>' for r in rows)
     return layout(f'<h1>Submissions</h1><table><tr><th>Name</th><th>Phone</th><th>Duration</th><th>Rate</th><th>kbps</th><th>Play</th></tr>{cells or "<tr><td colspan=6>No audio submissions yet.</td></tr>"}</table>')
+
+@app.get('/people/{person_id}/classification-input')
+def classification_input(person_id: int):
+    with connection() as conn:
+        person = conn.execute(
+            'SELECT id, canonical_name, email, phone, classification, classification_status '
+            'FROM people WHERE id=?',
+            (person_id,),
+        ).fetchone()
+
+        if not person:
+            raise HTTPException(404, 'Person not found.')
+
+        skills = conn.execute(
+            'SELECT skill FROM person_skills WHERE person_id=? ORDER BY skill',
+            (person_id,),
+        ).fetchall()
+
+    return {
+        'person_id': person['id'],
+        'name': person['canonical_name'],
+        'email': person['email'],
+        'phone': person['phone'],
+        'skills': [row['skill'] for row in skills],
+        'classification': person['classification'],
+        'classification_status': person['classification_status'],
+    }
+
+
+@app.patch('/people/{person_id}/classification')
+def update_classification(person_id: int, classification: str):
+    classification = classification.strip()
+
+    allowed = {
+        'automation-heavy',
+        'web-development',
+        'data',
+        'general',
+    }
+
+    if classification not in allowed:
+        raise HTTPException(
+            422,
+            f'Invalid classification. Use one of: {", ".join(sorted(allowed))}.',
+        )
+
+    with connection() as conn:
+        cursor = conn.execute(
+            'UPDATE people '
+            'SET classification=?, classification_status=?, updated_at=CURRENT_TIMESTAMP '
+            'WHERE id=?',
+            (classification, 'completed', person_id),
+        )
+
+        if cursor.rowcount == 0:
+            raise HTTPException(404, 'Person not found.')
+
+    return {
+        'person_id': person_id,
+        'classification': classification,
+        'classification_status': 'completed',
+    }

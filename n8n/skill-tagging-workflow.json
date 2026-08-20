@@ -1,8 +1,120 @@
 {
-  "name": "ConsultBae local skill classification",
+  "name": "ConsultBae Skill Classification",
   "nodes": [
-    {"parameters":{"path":"consultbae-classify","httpMethod":"POST","responseMode":"lastNode"},"id":"webhook","name":"Classify person","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[300,300]},
-    {"parameters":{"jsCode":"const skills = ($json.body?.skills || '').toLowerCase();\nconst category = /n8n|zapier|make|langchain|openai|automation/.test(skills) ? 'automation-heavy' : /fastapi|django|react|javascript/.test(skills) ? 'web-development' : /python|sql|pandas|data/.test(skills) ? 'data' : 'general';\nreturn [{ json: { person_id: $json.body?.person_id, classification: category, classification_status: 'completed' } }];"},"id":"classify","name":"Classify locally","type":"n8n-nodes-base.code","typeVersion":2,"position":[540,300]}
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "consultbae-classify",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "999f41bd-c757-44b1-b6f3-531e977e04f3",
+      "name": "Webhook",
+      "webhookId": "a2d92a99-b2bf-4ace-a9e7-310c7823d4d6"
+    },
+    {
+      "parameters": {
+        "url": "=http://host.docker.internal:8010/people/{{$json.body.person_id}}/classification-input",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        208,
+        0
+      ],
+      "id": "b42ca64c-0c58-4017-898e-8931068ca405",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "jsCode": "const skills = ($json.skills || []).join(' ').toLowerCase();\n\nconst classification =\n  /n8n|zapier|make|langchain|openai|automation/.test(skills)\n    ? 'automation-heavy'\n    : /fastapi|django|react|javascript/.test(skills)\n      ? 'web-development'\n      : /python|sql|pandas|data/.test(skills)\n        ? 'data'\n        : 'general';\n\nreturn [{\n  json: {\n    person_id: $json.person_id,\n    name: $json.name,\n    skills: $json.skills,\n    classification,\n    classification_status: 'completed'\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        0
+      ],
+      "id": "2285df85-e4c7-49b7-8e66-42b5a4dbff42",
+      "name": "Classify Skills"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=http://host.docker.internal:8010/people/{{$json.person_id}}/classification",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "classification",
+              "value": "={{$json.classification}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        528,
+        0
+      ],
+      "id": "ec46a499-4a58-4ed1-b2af-93620e9a00ee",
+      "name": "Update Classifications"
+    }
   ],
-  "connections":{"Classify person":{"main":[[{"node":"Classify locally","type":"main","index":0}]]}},"active":false,"settings":{},"versionId":"local-1"
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Classify Skills",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Skills": {
+      "main": [
+        [
+          {
+            "node": "Update Classifications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "fd13bb80-5d8d-48e7-8216-32094567c38a",
+  "meta": {
+    "instanceId": "e37444b483f34f7971843abdbc1197de67d16edf2951c958eacdf27b11f3e71b"
+  },
+  "id": "upupz9kIeyH8EiVf",
+  "tags": []
 }
